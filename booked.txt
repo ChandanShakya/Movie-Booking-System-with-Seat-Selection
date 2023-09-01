@@ -10,3 +10,9 @@ Phone Number: 2
 Number of seats: 2
 Total Price: $4.00
 =============================
+Movie: 2 (2)
+Customer Name: 2
+Phone Number: 2
+Number of seats: 2
+Total Price: $4.00
+=============================

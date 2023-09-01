@@ -1,19 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
+#include <conio.h>
 
 #define NUM_ROWS 7
 #define NUM_COLS 16
-
-// Structure to hold movie details
-struct Movie
-{
-    char name[100];
-    float price;
-    char timing[50];
-    struct Movie *next;
-};
+#define MAX_MOVIES 100
+#define MAX_BOOKINGS 100
 
 // Structure to hold customer details
 struct Customer
@@ -32,23 +25,36 @@ struct BookedSeat
     int numSeats;
     float totalPrice;
     struct Customer customer;
-    struct BookedSeat *next;
 };
 
 // Global 2D array to represent seats
 char cinemaHall[NUM_ROWS][NUM_COLS];
 
+// Global arrays to store movies and bookings
+struct BookedSeat bookings[MAX_BOOKINGS];
+int numBookings = 0;
+
+struct Movie
+{
+    char name[100];
+    float price;
+    char timing[50];
+};
+
+struct Movie movies[MAX_MOVIES];
+int numMovies = 0;
+
 // Function prototypes
-void displayMovies(struct Movie *head);
-void addNewMovie(struct Movie **head, const char *name, float price, const char *timing);
-void bookSeats(struct Movie *head, struct BookedSeat **bookingsHead, const char *movieName, const char *timing, int numSeats, struct Customer customer);
+void displayMovies();
+void addNewMovie(const char *name, float price, const char *timing);
+void bookSeats(const char *movieName, const char *timing, int numSeats, struct Customer customer);
 void displaySeats(const char *movieName, const char *timing);
-void generateReceipt(struct BookedSeat *booking, float seatPrice);
-void saveBookingToFile(struct BookedSeat *booking, float seatPrice);
+void generateReceipt(int bookingIndex);
+void saveBookingToFile(int bookingIndex);
 void saveSeatsToFile();
-void loadMoviesFromFile(struct Movie **head);
-void showSeatsForMovie(struct Movie *moviesHead, struct BookedSeat *bookingsHead);
-struct BookedSeat *getBookingForMovie(struct BookedSeat *head, const char *movieName, const char *timing);
+void loadMoviesFromFile();
+int findMovieIndex(const char *movieName, const char *timing);
+void showSeatsForMovie(const char *movieName, const char *timing);
 
 // Function to display the main menu
 void displayMainMenu()
@@ -149,9 +155,6 @@ int labelToRow(char label)
 
 int main()
 {
-    struct Movie *moviesHead = NULL;
-    struct BookedSeat *bookingsHead = NULL;
-    struct Customer customer;
     char movieName[100], timing[50];
     int numSeats;
     float price;
@@ -159,8 +162,9 @@ int main()
     // Initialize cinema hall with empty seats and passageways
     initializeCinemaHall();
 
-    // Load movies from Movies.txt and store them in the 'movies' linked list
-    loadMoviesFromFile(&moviesHead);
+    // Load movies from Movies.txt
+    loadMoviesFromFile();
+    system("cls");
 
     int choice;
     do
@@ -171,30 +175,40 @@ int main()
         switch (choice)
         {
         case 1:
+            system("cls");
             printf("\nAvailable Movies:\n");
-            displayMovies(moviesHead);
+            displayMovies();
+            getch();
+            system("cls");
             break;
 
         case 2:
+            system("cls");
             printf("\nEnter movie name: ");
             scanf("%s", movieName);
             printf("Enter movie price: ");
             price = getFloatInput(); // Use the input validation function
             printf("Enter movie timing: ");
             scanf("%s", timing);
+            system("cls");
 
-            addNewMovie(&moviesHead, movieName, price, timing);
-            printf("Movie added successfully!\n");
+            addNewMovie(movieName, price, timing);
+            getch();
+            system("cls");
+
             break;
 
         case 3:
+            system("cls");
+
             printf("\nAvailable Movies:\n");
-            displayMovies(moviesHead);
+            displayMovies();
             printf("Enter the name of the movie you want to book: ");
             scanf("%s", movieName);
             printf("Enter the timing of the movie you want to book: ");
             scanf("%s", timing);
 
+            struct Customer customer;
             printf("Enter your name: ");
             scanf("%s", customer.name);
             printf("Enter your phone number: ");
@@ -202,38 +216,42 @@ int main()
 
             printf("Enter the number of seats you want to book: ");
             numSeats = getIntegerInput(); // Use the input validation function
+            system("cls");
 
-            bookSeats(moviesHead, &bookingsHead, movieName, timing, numSeats, customer);
+            bookSeats(movieName, timing, numSeats, customer);
+            getch();
+            system("cls");
+
             break;
 
         case 4:
-            showSeatsForMovie(moviesHead, bookingsHead);
-            break;
+            system("cls");
 
+            printf("\nEnter movie name: ");
+            scanf("%s", movieName);
+            printf("Enter movie timing: ");
+            scanf("%s", timing);
+            system("cls");
+
+            showSeatsForMovie(movieName, timing);
+            getch();
+            system("cls");
+
+            break;
         case 5:
             printf("Exiting...\n");
             break;
 
         default:
+            system("cls");
+
             printf("Invalid choice. Please try again.\n");
+            getch();
+            system("cls");
+
             break;
         }
     } while (choice != 5);
-
-    // Cleanup: Free dynamically allocated memory for movies and bookings linked lists
-    while (moviesHead != NULL)
-    {
-        struct Movie *temp = moviesHead;
-        moviesHead = moviesHead->next;
-        free(temp);
-    }
-
-    while (bookingsHead != NULL)
-    {
-        struct BookedSeat *temp = bookingsHead;
-        bookingsHead = bookingsHead->next;
-        free(temp);
-    }
 
     // Save seat reservations and availability to files
     saveSeatsToFile();
@@ -241,92 +259,42 @@ int main()
     return 0;
 }
 
-void displayMovies(struct Movie *head)
+void displayMovies()
 {
-    struct Movie *current = head;
-    int index = 1;
-    while (current != NULL)
+    for (int i = 0; i < numMovies; i++)
     {
-        printf("%d. %s (%s) - $%.2f\n", index, current->name, current->timing, current->price);
-        current = current->next;
-        index++;
+        printf("%d. %s (%s) - $%.2f\n", i + 1, movies[i].name, movies[i].timing, movies[i].price);
     }
 }
 
-void addNewMovie(struct Movie **head, const char *name, float price, const char *timing)
+void addNewMovie(const char *name, float price, const char *timing)
 {
-    // Check if the movie already exists in the file
-    FILE *moviesFile = fopen("Movies.txt", "r");
-    if (moviesFile == NULL)
+    // Check if the movie already exists
+    for (int i = 0; i < numMovies; i++)
     {
-        printf("Error opening Movies.txt file.\n");
-        return;
-    }
-
-    char movieName[100];
-    float moviePrice;
-    char movieTiming[50];
-    bool movieExists = false;
-
-    while (fscanf(moviesFile, "%s %f %s", movieName, &moviePrice, movieTiming) != EOF)
-    {
-        if (strcmp(movieName, name) == 0 && strcmp(movieTiming, timing) == 0)
+        if (strcmp(movies[i].name, name) == 0 && strcmp(movies[i].timing, timing) == 0)
         {
-            // Movie already exists
-            movieExists = true;
-            break;
+            printf("Movie '%s' (%s) already exists.\n", name, timing);
+            return;
         }
     }
 
-    fclose(moviesFile);
-
-    // If the movie already exists, do not add it again
-    if (movieExists)
+    // If not, add the movie
+    if (numMovies < MAX_MOVIES)
     {
-        printf("Movie '%s' (%s) already exists in the file.\n", name, timing);
-        return;
-    }
-
-    // Movie doesn't exist, proceed to add it
-    struct Movie *newMovie = (struct Movie *)malloc(sizeof(struct Movie));
-    if (newMovie == NULL)
-    {
-        printf("Memory allocation error.\n");
-        return;
-    }
-
-    strcpy(newMovie->name, name);
-    newMovie->price = price;
-    strcpy(newMovie->timing, timing);
-    newMovie->next = NULL;
-
-    // Append the movie details to the "Movies.txt" file
-    moviesFile = fopen("Movies.txt", "a");
-    if (moviesFile == NULL)
-    {
-        printf("Error opening Movies.txt file for writing.\n");
-        free(newMovie);
-        return;
-    }
-
-    fprintf(moviesFile, "%s %.2f %s\n", newMovie->name, newMovie->price, newMovie->timing);
-    fclose(moviesFile);
-
-    if (*head == NULL)
-    {
-        *head = newMovie;
+        strcpy(movies[numMovies].name, name);
+        movies[numMovies].price = price;
+        strcpy(movies[numMovies].timing, timing);
+        numMovies++;
+        printf("Movie added successfully!\n");
     }
     else
     {
-        struct Movie *current = *head;
-        while (current->next != NULL)
-        {
-            current = current->next;
-        }
-        current->next = newMovie;
+        printf("Maximum number of movies reached.\n");
     }
 }
-void loadMoviesFromFile(struct Movie **head)
+
+void loadMoviesFromFile()
 {
     FILE *moviesFile = fopen("Movies.txt", "r");
     if (moviesFile == NULL)
@@ -341,131 +309,97 @@ void loadMoviesFromFile(struct Movie **head)
 
     while (fscanf(moviesFile, "%s %f %s", name, &price, timing) == 3)
     {
-        // Create a new movie node
-        struct Movie *newMovie = (struct Movie *)malloc(sizeof(struct Movie));
-        if (newMovie == NULL)
-        {
-            printf("Memory allocation error.\n");
-            fclose(moviesFile);
-            return;
-        }
-
-        strcpy(newMovie->name, name);
-        newMovie->price = price;
-        strcpy(newMovie->timing, timing);
-        newMovie->next = NULL;
-
-        // Add the new movie to the linked list
-        if (*head == NULL)
-        {
-            *head = newMovie;
-        }
-        else
-        {
-            struct Movie *current = *head;
-            while (current->next != NULL)
-            {
-                current = current->next;
-            }
-            current->next = newMovie;
-        }
+        addNewMovie(name, price, timing);
     }
 
     fclose(moviesFile);
 }
 
-
-void bookSeats(struct Movie *head, struct BookedSeat **bookingsHead, const char *movieName, const char *timing, int numSeats, struct Customer customer)
+void bookSeats(const char *movieName, const char *timing, int numSeats, struct Customer customer)
 {
-    struct Movie *current = head;
-    while (current != NULL)
+    int movieIndex = findMovieIndex(movieName, timing);
+
+    if (movieIndex == -1)
     {
-        if (strcmp(current->name, movieName) == 0 && strcmp(current->timing, timing) == 0)
-        {
-            // Movie found, book seats
-            struct BookedSeat *newBooking = (struct BookedSeat *)malloc(sizeof(struct BookedSeat));
-            if (newBooking == NULL)
-            {
-                printf("Memory allocation error.\n");
-                return;
-            }
-
-            strcpy(newBooking->movieName, movieName);
-            strcpy(newBooking->timing, timing);
-            newBooking->numSeats = numSeats;
-            newBooking->customer = customer;
-            newBooking->next = *bookingsHead;
-            *bookingsHead = newBooking;
-
-            // Display the updated seats
-            displaySeats(movieName, timing);
-
-            // Prompt the user to select seats
-            printf("Select seats by entering the row (A-G) and seat number (1-14) for each seat:\n");
-
-            for (int i = 0; i < numSeats; i++)
-            {
-                char seatPosition[5];
-                printf("Enter seat %d (e.g., A3): ", i + 1);
-                scanf("%s", seatPosition);
-
-                // Parse the seat position
-                char rowLabel;
-                int seatNumber;
-                if (sscanf(seatPosition, "%c%d", &rowLabel, &seatNumber) == 2)
-                {
-                    int row = labelToRow(rowLabel);
-                    int col;
-                    if (seatNumber <= 7)
-                    {
-                        col = seatNumber - 1;
-                    }
-                    else if (seatNumber >= 8)
-                    {
-                        col = seatNumber + 1;
-                    }
-
-                    // Check if the seat is available
-                    if (cinemaHall[row][col] == '0')
-                    {
-                        // Book the seat
-                        cinemaHall[row][col] = 'X';
-                        newBooking->row = row;
-                        newBooking->col = col;
-                    }
-                    else
-                    {
-                        // Seat is already booked
-                        printf("Seat %s is already booked. Please choose another seat.\n", seatPosition);
-                        i--; // Decrement i to re-enter the same seat
-                    }
-                }
-                else
-                {
-                    // Invalid seat position format
-                    printf("Invalid seat position format. Please use the format: A3, B5, etc.\n");
-                    i--; // Decrement i to re-enter the same seat
-                }
-            }
-
-            printf("\n%d seat(s) booked successfully for the movie '%s' (%s).\n", numSeats, movieName, timing);
-            // Generate and print the receipt
-            generateReceipt(newBooking, current->price);
-
-            // Save the booking to file
-            saveBookingToFile(newBooking, current->price);
-
-            return;
-        }
-        current = current->next;
+        printf("\nMovie '%s' (%s) not found.\n", movieName, timing);
+        return;
     }
 
-    // If movie not found
-    printf("\nMovie '%s' (%s) not found.\n", movieName, timing);
+    if (numSeats <= 0)
+    {
+        printf("Invalid number of seats.\n");
+        return;
+    }
+
+    printf("Booking %d seats for the movie: %s (%s)\n", numSeats, movieName, timing);
+
+    // Loop to book each seat
+    for (int i = 0; i < numSeats; i++)
+    {
+        printf("Enter seat position for seat %d (e.g., A3): ", i + 1);
+        char seatPosition[5];
+        scanf("%s", seatPosition);
+
+        // Parse the seat position
+        char rowLabel;
+        int seatNumber;
+        if (sscanf(seatPosition, "%c%d", &rowLabel, &seatNumber) == 2)
+        {
+            int row = labelToRow(rowLabel);
+            int col;
+            if (seatNumber <= 7)
+            {
+                col = seatNumber - 1;
+            }
+            else if (seatNumber >= 8)
+            {
+                col = seatNumber + 1;
+            }
+
+            // Check if the seat is available
+            if (row >= 0 && row < NUM_ROWS && col >= 0 && col < NUM_COLS && cinemaHall[row][col] == '0')
+            {
+                cinemaHall[row][col] = 'X';
+
+                // Create a booking record
+                strcpy(bookings[numBookings].movieName, movieName);
+                strcpy(bookings[numBookings].timing, timing);
+                bookings[numBookings].row = row;
+                bookings[numBookings].col = col;
+                bookings[numBookings].numSeats = 1; // Book one seat at a time
+                bookings[numBookings].customer = customer;
+                bookings[numBookings].totalPrice = movies[movieIndex].price; // Price for one seat
+
+                numBookings++;
+
+                printf("Seat booked: Row %c, Seat %d\n", rowToLabel(row), col + 1);
+            }
+            else
+            {
+                printf("Seat %s is already booked or invalid. Please choose another seat.\n", seatPosition);
+                i--; // Decrement i to re-enter the same seat
+            }
+        }
+        else
+        {
+            // Invalid seat position format
+            printf("Invalid seat position format. Please use the format: A3, B5, etc.\n");
+            i--; // Decrement i to re-enter the same seat
+        }
+    }
 }
+
 
 void displaySeats(const char *movieName, const char *timing)
 {
+    int movieIndex = findMovieIndex(movieName, timing);
+
+    if (movieIndex == -1)
+    {
+        printf("\nMovie '%s' (%s) not found.\n", movieName, timing);
+        return;
+    }
+
     printf("\n========================= Seats for %s (%s) ========================\n", movieName, timing);
 
     // Display column numbers
@@ -511,18 +445,18 @@ void displaySeats(const char *movieName, const char *timing)
     printf("==================================================================\n");
 }
 
-void generateReceipt(struct BookedSeat *booking, float seatPrice)
+void generateReceipt(int bookingIndex)
 {
     printf("\n========== Receipt ==========\n");
-    printf("Movie: %s (%s)\n", booking->movieName, booking->timing);
-    printf("Customer Name: %s\n", booking->customer.name);
-    printf("Phone Number: %s\n", booking->customer.phone);
-    printf("Number of seats: %d\n", booking->numSeats);
-    printf("Total Price: $%.2f\n", booking->numSeats * seatPrice); // Calculate total price
+    printf("Movie: %s (%s)\n", bookings[bookingIndex].movieName, bookings[bookingIndex].timing);
+    printf("Customer Name: %s\n", bookings[bookingIndex].customer.name);
+    printf("Phone Number: %s\n", bookings[bookingIndex].customer.phone);
+    printf("Number of seats: %d\n", bookings[bookingIndex].numSeats);
+    printf("Total Price: $%.2f\n", bookings[bookingIndex].totalPrice); // Calculate total price
     printf("=============================\n");
 }
 
-void saveBookingToFile(struct BookedSeat *booking, float seatPrice)
+void saveBookingToFile(int bookingIndex)
 {
     FILE *bookedFile = fopen("booked.txt", "a");
     if (bookedFile == NULL)
@@ -531,11 +465,11 @@ void saveBookingToFile(struct BookedSeat *booking, float seatPrice)
         return;
     }
 
-    fprintf(bookedFile, "Movie: %s (%s)\n", booking->movieName, booking->timing);
-    fprintf(bookedFile, "Customer Name: %s\n", booking->customer.name);
-    fprintf(bookedFile, "Phone Number: %s\n", booking->customer.phone);
-    fprintf(bookedFile, "Number of seats: %d\n", booking->numSeats);
-    fprintf(bookedFile, "Total Price: $%.2f\n", booking->numSeats * seatPrice); // Assuming $10 per seat
+    fprintf(bookedFile, "Movie: %s (%s)\n", bookings[bookingIndex].movieName, bookings[bookingIndex].timing);
+    fprintf(bookedFile, "Customer Name: %s\n", bookings[bookingIndex].customer.name);
+    fprintf(bookedFile, "Phone Number: %s\n", bookings[bookingIndex].customer.phone);
+    fprintf(bookedFile, "Number of seats: %d\n", bookings[bookingIndex].numSeats);
+    fprintf(bookedFile, "Total Price: $%.2f\n", bookings[bookingIndex].totalPrice);
     fprintf(bookedFile, "=============================\n");
 
     fclose(bookedFile);
@@ -562,82 +496,69 @@ void saveSeatsToFile()
     fclose(seatsFile);
 }
 
-struct BookedSeat *getBookingForMovie(struct BookedSeat *head, const char *movieName, const char *timing)
+int findMovieIndex(const char *movieName, const char *timing)
 {
-    struct BookedSeat *current = head;
-    while (current != NULL)
+    for (int i = 0; i < numMovies; i++)
     {
-        if (strcmp(current->movieName, movieName) == 0 && strcmp(current->timing, timing) == 0)
+        if (strcmp(movies[i].name, movieName) == 0 && strcmp(movies[i].timing, timing) == 0)
         {
-            return current;
+            return i;
         }
-        current = current->next;
     }
-    return NULL;
+    return -1;
 }
 
-void showSeatsForMovie(struct Movie *moviesHead, struct BookedSeat *bookingsHead)
+void showSeatsForMovie(const char *movieName, const char *timing)
 {
-    char movieName[100], timing[50];
+    int movieIndex = findMovieIndex(movieName, timing);
 
-    printf("\nAvailable Movies:\n");
-    displayMovies(moviesHead);
-
-    printf("Enter the name of the movie to see seats: ");
-    scanf("%s", movieName);
-    printf("Enter the timing of the movie: ");
-    scanf("%s", timing);
-
-    struct BookedSeat *booking = getBookingForMovie(bookingsHead, movieName, timing);
-
-    if (booking != NULL)
+    if (movieIndex == -1)
     {
-        printf("\n========================= Seats for %s (%s) ========================\n", movieName, timing);
+        printf("\nMovie '%s' (%s) not found or no seats have been booked for this movie.\n", movieName, timing);
+        return;
+    }
 
-        // Display row labels (A, B, C, ...)
-        printf("   ");
+    printf("\n========================= Seats for %s (%s) ========================\n", movieName, timing);
 
-        for (int j = 1; j <= NUM_COLS; j++)
+    // Display column numbers
+    printf("   ");
+    for (int j = 1; j <= NUM_COLS; j++)
+    {
+        if (j == 8 || j == 9)
         {
-            if (j == 8 || j == 9)
+            printf("|  "); // Display empty spaces for passageways
+        }
+        else
+        {
+            if (j <= 7)
+            {
+                printf("%2d  ", j); // Display seat numbers
+            }
+            else
+            {
+                printf("%2d  ", j - 2); // Display seat numbers
+            }
+        }
+    }
+    printf("\n");
+
+    // Iterate through the cinema hall and display the seats
+    for (int i = 0; i < NUM_ROWS; i++)
+    {
+        printf("%c  ", rowToLabel(i)); // Display row label (A, B, C, ...)
+        for (int j = 0; j < NUM_COLS; j++)
+        {
+            if (j == 7 || j == 8)
             {
                 printf("|  "); // Display empty spaces for passageways
             }
             else
             {
-                if (j <= 7)
-                {
-                    printf("%2d  ", j); // Display seat numbers
-                }
-                else
-                {
-                    printf("%2d  ", j - 2); // Display seat numbers
-                }
+                printf("%2c  ", cinemaHall[i][j]); // Display seat status ('0' or 'X')
             }
         }
         printf("\n");
-
-        for (int i = 0; i < NUM_ROWS; i++)
-        {
-            printf("%c  ", rowToLabel(i)); // Display row label (A, B, C, ...)
-            for (int j = 0; j < NUM_COLS; j++)
-            {
-                if (j == 7 || j == 8)
-                {
-                    printf("|  "); // Display empty spaces for passageways
-                }
-                else
-                {
-                    printf("%2c  ", cinemaHall[i][j]); // Display seat status ('0' or 'X')
-                }
-            }
-            printf("\n");
-        }
-
-        printf("==================================================================\n");
     }
-    else
-    {
-        printf("\nMovie '%s' (%s) not found or no seats have been booked for this movie.\n", movieName, timing);
-    }
+
+    printf("==================================================================\n");
 }
