@@ -1,0 +1,48 @@
+Movie: 2 (2)
+Customer Name: 2
+Phone Number: 2
+Number of seats: 2
+Total Price: $20.00
+=============================
+Movie: 2 (2)
+Customer Name: 2
+Phone Number: 2
+Number of seats: 2
+Total Price: $20.00
+=============================
+Movie: 2 (2)
+Customer Name: 2
+Phone Number: 22
+Number of seats: 2
+Total Price: $20.00
+=============================
+Movie: 2 (2)
+Customer Name: 2
+Phone Number: 2
+Number of seats: 2
+Total Price: $20.00
+=============================
+Movie: 2 (2)
+Customer Name: 2
+Phone Number: 2
+Number of seats: 2
+Total Price: $20.00
+=============================
+Movie: 2 (2)
+Customer Name: 2
+Phone Number: 2
+Number of seats: 2
+Total Price: $20.00
+=============================
+Movie: 2 (2)
+Customer Name: 2
+Phone Number: 2
+Number of seats: 2
+Total Price: $20.00
+=============================
+Movie: 2 (2)
+Customer Name: 2
+Phone Number: 2
+Number of seats: 2
+Total Price: $20.00
+=============================
