@@ -43,9 +43,10 @@ void displayMovies(struct Movie *head);
 void addNewMovie(struct Movie **head, const char *name, float price, const char *timing);
 void bookSeats(struct Movie *head, struct BookedSeat **bookingsHead, const char *movieName, const char *timing, int numSeats, struct Customer customer);
 void displaySeats(const char *movieName, const char *timing);
-void generateReceipt(struct BookedSeat *booking);
-void saveBookingToFile(struct BookedSeat *booking);
+void generateReceipt(struct BookedSeat *booking, float seatPrice);
+void saveBookingToFile(struct BookedSeat *booking, float seatPrice);
 void saveSeatsToFile();
+void loadMoviesFromFile(struct Movie **head);
 void showSeatsForMovie(struct Movie *moviesHead, struct BookedSeat *bookingsHead);
 struct BookedSeat *getBookingForMovie(struct BookedSeat *head, const char *movieName, const char *timing);
 
@@ -158,20 +159,8 @@ int main()
     // Initialize cinema hall with empty seats and passageways
     initializeCinemaHall();
 
-    // Read movie details from Movies.txt and store them in the 'movies' linked list
-    FILE *moviesFile = fopen("Movies.txt", "r");
-    if (moviesFile == NULL)
-    {
-        printf("Error opening Movies.txt file.\n");
-        return 1;
-    }
-
-    char name[100];
-    while (fscanf(moviesFile, "%s %f %s", name, &price, timing) != EOF)
-    {
-        addNewMovie(&moviesHead, name, price, timing);
-    }
-    fclose(moviesFile);
+    // Load movies from Movies.txt and store them in the 'movies' linked list
+    loadMoviesFromFile(&moviesHead);
 
     int choice;
     do
@@ -266,6 +255,39 @@ void displayMovies(struct Movie *head)
 
 void addNewMovie(struct Movie **head, const char *name, float price, const char *timing)
 {
+    // Check if the movie already exists in the file
+    FILE *moviesFile = fopen("Movies.txt", "r");
+    if (moviesFile == NULL)
+    {
+        printf("Error opening Movies.txt file.\n");
+        return;
+    }
+
+    char movieName[100];
+    float moviePrice;
+    char movieTiming[50];
+    bool movieExists = false;
+
+    while (fscanf(moviesFile, "%s %f %s", movieName, &moviePrice, movieTiming) != EOF)
+    {
+        if (strcmp(movieName, name) == 0 && strcmp(movieTiming, timing) == 0)
+        {
+            // Movie already exists
+            movieExists = true;
+            break;
+        }
+    }
+
+    fclose(moviesFile);
+
+    // If the movie already exists, do not add it again
+    if (movieExists)
+    {
+        printf("Movie '%s' (%s) already exists in the file.\n", name, timing);
+        return;
+    }
+
+    // Movie doesn't exist, proceed to add it
     struct Movie *newMovie = (struct Movie *)malloc(sizeof(struct Movie));
     if (newMovie == NULL)
     {
@@ -277,6 +299,18 @@ void addNewMovie(struct Movie **head, const char *name, float price, const char 
     newMovie->price = price;
     strcpy(newMovie->timing, timing);
     newMovie->next = NULL;
+
+    // Append the movie details to the "Movies.txt" file
+    moviesFile = fopen("Movies.txt", "a");
+    if (moviesFile == NULL)
+    {
+        printf("Error opening Movies.txt file for writing.\n");
+        free(newMovie);
+        return;
+    }
+
+    fprintf(moviesFile, "%s %.2f %s\n", newMovie->name, newMovie->price, newMovie->timing);
+    fclose(moviesFile);
 
     if (*head == NULL)
     {
@@ -292,6 +326,54 @@ void addNewMovie(struct Movie **head, const char *name, float price, const char 
         current->next = newMovie;
     }
 }
+void loadMoviesFromFile(struct Movie **head)
+{
+    FILE *moviesFile = fopen("Movies.txt", "r");
+    if (moviesFile == NULL)
+    {
+        printf("Error opening Movies.txt file.\n");
+        return;
+    }
+
+    char name[100];
+    float price;
+    char timing[50];
+
+    while (fscanf(moviesFile, "%s %f %s", name, &price, timing) == 3)
+    {
+        // Create a new movie node
+        struct Movie *newMovie = (struct Movie *)malloc(sizeof(struct Movie));
+        if (newMovie == NULL)
+        {
+            printf("Memory allocation error.\n");
+            fclose(moviesFile);
+            return;
+        }
+
+        strcpy(newMovie->name, name);
+        newMovie->price = price;
+        strcpy(newMovie->timing, timing);
+        newMovie->next = NULL;
+
+        // Add the new movie to the linked list
+        if (*head == NULL)
+        {
+            *head = newMovie;
+        }
+        else
+        {
+            struct Movie *current = *head;
+            while (current->next != NULL)
+            {
+                current = current->next;
+            }
+            current->next = newMovie;
+        }
+    }
+
+    fclose(moviesFile);
+}
+
 
 void bookSeats(struct Movie *head, struct BookedSeat **bookingsHead, const char *movieName, const char *timing, int numSeats, struct Customer customer)
 {
@@ -367,12 +449,11 @@ void bookSeats(struct Movie *head, struct BookedSeat **bookingsHead, const char 
             }
 
             printf("\n%d seat(s) booked successfully for the movie '%s' (%s).\n", numSeats, movieName, timing);
-
             // Generate and print the receipt
-            generateReceipt(newBooking);
+            generateReceipt(newBooking, current->price);
 
             // Save the booking to file
-            saveBookingToFile(newBooking);
+            saveBookingToFile(newBooking, current->price);
 
             return;
         }
@@ -430,18 +511,18 @@ void displaySeats(const char *movieName, const char *timing)
     printf("==================================================================\n");
 }
 
-void generateReceipt(struct BookedSeat *booking)
+void generateReceipt(struct BookedSeat *booking, float seatPrice)
 {
     printf("\n========== Receipt ==========\n");
     printf("Movie: %s (%s)\n", booking->movieName, booking->timing);
     printf("Customer Name: %s\n", booking->customer.name);
     printf("Phone Number: %s\n", booking->customer.phone);
     printf("Number of seats: %d\n", booking->numSeats);
-    printf("Total Price: $%.2f\n", booking->numSeats * 10.0); // Assuming $10 per seat
+    printf("Total Price: $%.2f\n", booking->numSeats * seatPrice); // Calculate total price
     printf("=============================\n");
 }
 
-void saveBookingToFile(struct BookedSeat *booking)
+void saveBookingToFile(struct BookedSeat *booking, float seatPrice)
 {
     FILE *bookedFile = fopen("booked.txt", "a");
     if (bookedFile == NULL)
@@ -454,7 +535,7 @@ void saveBookingToFile(struct BookedSeat *booking)
     fprintf(bookedFile, "Customer Name: %s\n", booking->customer.name);
     fprintf(bookedFile, "Phone Number: %s\n", booking->customer.phone);
     fprintf(bookedFile, "Number of seats: %d\n", booking->numSeats);
-    fprintf(bookedFile, "Total Price: $%.2f\n", booking->numSeats * 10.0); // Assuming $10 per seat
+    fprintf(bookedFile, "Total Price: $%.2f\n", booking->numSeats * seatPrice); // Assuming $10 per seat
     fprintf(bookedFile, "=============================\n");
 
     fclose(bookedFile);
